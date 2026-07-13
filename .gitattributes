@@ -1,0 +1,14 @@
+# Enforce consistent line endings across platforms
+* text=auto eol=lf
+
+# Windows batch scripts need CRLF
+*.bat text eol=crlf
+
+# The Gradle wrapper script MUST stay LF (runs on Linux CI)
+gradlew text eol=lf
+
+# Binary
+*.jar binary
+*.png binary
+*.jpg binary
+*.keystore binary

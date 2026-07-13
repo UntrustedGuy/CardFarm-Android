@@ -1,0 +1,304 @@
+package io.github.untrustedguy.cardfarm.steam
+
+import android.util.Log
+import io.github.untrustedguy.cardfarm.data.SessionStore
+import `in`.dragonbra.javasteam.base.ClientMsgProtobuf
+import `in`.dragonbra.javasteam.enums.EMsg
+import `in`.dragonbra.javasteam.enums.EResult
+import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesClientserver.CMsgClientGamesPlayed
+import `in`.dragonbra.javasteam.steam.authentication.AuthSessionDetails
+import `in`.dragonbra.javasteam.steam.authentication.AuthenticationException
+import `in`.dragonbra.javasteam.steam.handlers.steamuser.LogOnDetails
+import `in`.dragonbra.javasteam.steam.handlers.steamuser.SteamUser
+import `in`.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOffCallback
+import `in`.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOnCallback
+import `in`.dragonbra.javasteam.steam.steamclient.SteamClient
+import `in`.dragonbra.javasteam.steam.steamclient.callbackmgr.CallbackManager
+import `in`.dragonbra.javasteam.steam.steamclient.callbacks.ConnectedCallback
+import `in`.dragonbra.javasteam.steam.steamclient.callbacks.DisconnectedCallback
+import `in`.dragonbra.javasteam.types.SteamID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.io.Closeable
+
+/**
+ * Owns the JavaSteam [SteamClient] and its callback loop. All Steam network
+ * activity happens on the single [callbackThread]; public methods are safe to
+ * call from any thread and post work onto it.
+ *
+ * The card-farming policy itself lives in [FarmingEngine]; this class only
+ * handles connection, authentication and the low-level "play games" message.
+ */
+class SteamController(
+    private val session: SessionStore,
+    private val scope: CoroutineScope,
+) {
+
+    private companion object {
+        const val TAG = "SteamController"
+        // Distinct from any real client so Steam doesn't kick our own session.
+        const val LOGIN_ID = 0x4641524Du.toInt() // "FARM"
+    }
+
+    private val steamClient = SteamClient()
+    private val manager = CallbackManager(steamClient)
+    private val steamUser: SteamUser = steamClient.getHandler(SteamUser::class.java)!!
+    private val subscriptions = mutableListOf<Closeable>()
+    private val authenticator = UiAuthenticator()
+    private val farmingEngine = FarmingEngine(this, session, scope)
+
+    @Volatile private var running = false
+    @Volatile private var callbackThread: Thread? = null
+
+    /** Set when the user asked to log in with fresh credentials. */
+    @Volatile private var pendingCredentials: Pair<String, String>? = null
+    /** Set when reconnecting with a stored refresh token. */
+    @Volatile private var pendingReconnect = false
+    @Volatile private var intentionalDisconnect = false
+
+    fun start() {
+        if (running) return
+        running = true
+        subscriptions += manager.subscribe(ConnectedCallback::class.java, ::onConnected)
+        subscriptions += manager.subscribe(DisconnectedCallback::class.java, ::onDisconnected)
+        subscriptions += manager.subscribe(LoggedOnCallback::class.java, ::onLoggedOn)
+        subscriptions += manager.subscribe(LoggedOffCallback::class.java, ::onLoggedOff)
+
+        callbackThread = Thread({
+            while (running) {
+                try {
+                    manager.runWaitCallbacks(1000L)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Callback loop error", t)
+                }
+            }
+        }, "steam-callbacks").apply { isDaemon = true; start() }
+    }
+
+    fun shutdown() {
+        running = false
+        try {
+            farmingEngine.stop()
+            if (steamClient.isConnected) steamUser.logOff()
+            steamClient.disconnect()
+        } catch (t: Throwable) {
+            Log.w(TAG, "Error during shutdown", t)
+        }
+        subscriptions.forEach { runCatching { it.close() } }
+        subscriptions.clear()
+        callbackThread = null
+    }
+
+    // ---- Public commands (thread-safe entry points) ------------------------
+
+    fun loginWithCredentials(username: String, password: String) {
+        pendingCredentials = username to password
+        pendingReconnect = false
+        intentionalDisconnect = false
+        FarmRepository.connection.value = ConnectionState.CONNECTING
+        FarmRepository.statusText.value = "Connecting to Steam…"
+        connect()
+    }
+
+    fun reconnectWithSession() {
+        if (!session.hasSession) {
+            FarmRepository.postMessage("No saved session — please log in.")
+            FarmRepository.connection.value = ConnectionState.OFFLINE
+            return
+        }
+        pendingCredentials = null
+        pendingReconnect = true
+        intentionalDisconnect = false
+        FarmRepository.accountName.value = session.accountName
+        FarmRepository.connection.value = ConnectionState.CONNECTING
+        FarmRepository.statusText.value = "Reconnecting…"
+        connect()
+    }
+
+    fun logout() {
+        intentionalDisconnect = true
+        session.clearSession()
+        farmingEngine.stop()
+        FarmRepository.badges.value = emptyList()
+        FarmRepository.accountName.value = null
+        runCatching {
+            if (steamClient.isConnected) steamUser.logOff()
+            steamClient.disconnect()
+        }
+        FarmRepository.resetToOffline()
+        FarmRepository.statusText.value = "Logged out"
+    }
+
+    fun startCardFarming() = farmingEngine.startCardFarming()
+    fun idleGames(appIds: List<Int>) = farmingEngine.idleGames(appIds)
+    fun stopIdling() = farmingEngine.stop()
+    fun refreshBadges() = farmingEngine.refreshBadges()
+
+    // ---- Internal ----------------------------------------------------------
+
+    private fun connect() {
+        runCatching {
+            if (steamClient.isConnected) steamClient.disconnect()
+        }
+        steamClient.connect()
+    }
+
+    /**
+     * Sends a ClientGamesPlayed message. An empty list stops idling; up to ~32
+     * app IDs can be idled at once (Steam's limit), matching ASF behaviour.
+     */
+    fun playGames(appIds: List<Int>) {
+        if (!steamClient.isConnected) return
+        val request = ClientMsgProtobuf<CMsgClientGamesPlayed.Builder>(
+            CMsgClientGamesPlayed::class.java,
+            EMsg.ClientGamesPlayed,
+        ).apply {
+            appIds.forEach { appId ->
+                body.addGamesPlayedBuilder().setGameId(appId.toLong())
+            }
+        }
+        steamClient.send(request)
+        Log.d(TAG, "Now playing ${appIds.size} game(s): $appIds")
+    }
+
+    val currentSteamId: SteamID?
+        get() = steamClient.steamID
+
+    /**
+     * Exchanges a long-lived refresh token for a short-lived web access token,
+     * used as the steamLoginSecure cookie when scraping badge pages. Blocking —
+     * call from a background thread.
+     */
+    fun generateWebAccessToken(steamId64: Long, refreshToken: String): String {
+        val steamId = SteamID(steamId64)
+        val result = steamClient.authentication
+            .generateAccessTokenForApp(steamId, refreshToken, false).get()
+        // Persist a rotated refresh token if Steam issued one.
+        result.refreshToken.takeIf { it.isNotEmpty() }?.let { session.refreshToken = it }
+        return result.accessToken
+    }
+
+    private fun onConnected(callback: ConnectedCallback) {
+        Log.i(TAG, "Connected to Steam")
+        scope.launch(Dispatchers.IO) { authenticate() }
+    }
+
+    private fun authenticate() {
+        FarmRepository.connection.value = ConnectionState.AUTHENTICATING
+        try {
+            val reconnect = pendingReconnect
+            val creds = pendingCredentials
+
+            val logOnDetails = LogOnDetails().apply { loginID = LOGIN_ID }
+
+            if (reconnect) {
+                FarmRepository.statusText.value = "Signing in…"
+                logOnDetails.username = session.accountName.orEmpty()
+                logOnDetails.accessToken = session.refreshToken
+            } else if (creds != null) {
+                FarmRepository.statusText.value = "Authenticating…"
+                val details = AuthSessionDetails().apply {
+                    username = creds.first
+                    password = creds.second
+                    persistentSession = true
+                    guardData = session.guardData
+                    authenticator = this@SteamController.authenticator
+                }
+
+                val authSession = steamClient.authentication
+                    .beginAuthSessionViaCredentials(details).get()
+
+                val pollResult = authSession.pollingWaitForResult().get()
+
+                pollResult.newGuardData?.let { session.guardData = it }
+                session.accountName = pollResult.accountName
+                session.refreshToken = pollResult.refreshToken
+
+                logOnDetails.username = pollResult.accountName
+                logOnDetails.accessToken = pollResult.refreshToken
+            } else {
+                FarmRepository.postMessage("Nothing to log in with.")
+                return
+            }
+
+            steamUser.logOn(logOnDetails)
+        } catch (e: AuthenticationException) {
+            Log.e(TAG, "Auth failed", e)
+            FarmRepository.postMessage("Login failed: ${e.message}")
+            FarmRepository.connection.value = ConnectionState.OFFLINE
+            intentionalDisconnect = true
+            runCatching { steamClient.disconnect() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Auth error", e)
+            FarmRepository.postMessage("Login error: ${e.message ?: e.javaClass.simpleName}")
+            FarmRepository.connection.value = ConnectionState.OFFLINE
+            intentionalDisconnect = true
+            runCatching { steamClient.disconnect() }
+        } finally {
+            pendingCredentials = null
+        }
+    }
+
+    private fun onLoggedOn(callback: LoggedOnCallback) {
+        if (callback.result != EResult.OK) {
+            Log.w(TAG, "Logon failed: ${callback.result} / ${callback.extendedResult}")
+            when (callback.result) {
+                EResult.InvalidPassword, EResult.AccessDenied, EResult.Expired -> {
+                    // Stored refresh token is dead — force a fresh credential login.
+                    if (pendingReconnect) {
+                        session.clearSession()
+                        FarmRepository.postMessage("Session expired. Please log in again.")
+                    } else {
+                        FarmRepository.postMessage("Login denied: ${callback.result}")
+                    }
+                    intentionalDisconnect = true
+                    FarmRepository.resetToOffline()
+                    runCatching { steamClient.disconnect() }
+                }
+                else -> {
+                    FarmRepository.postMessage("Unable to log on: ${callback.result}")
+                    // Non-fatal: let the auto-reconnect on disconnect retry.
+                }
+            }
+            return
+        }
+
+        Log.i(TAG, "Logged on as ${session.accountName}")
+        pendingReconnect = false
+        callback.clientSteamID?.let { session.steamId64 = it.convertToUInt64() }
+        FarmRepository.accountName.value = session.accountName
+        FarmRepository.connection.value = ConnectionState.LOGGED_ON
+        FarmRepository.statusText.value = "Signed in"
+
+        farmingEngine.onLoggedOn()
+    }
+
+    private fun onLoggedOff(callback: LoggedOffCallback) {
+        Log.i(TAG, "Logged off: ${callback.result}")
+        FarmRepository.statusText.value = "Logged off: ${callback.result}"
+    }
+
+    private fun onDisconnected(callback: DisconnectedCallback) {
+        Log.i(TAG, "Disconnected (userInitiated=${callback.isUserInitiated})")
+        farmingEngine.onDisconnected()
+
+        if (intentionalDisconnect || !running) {
+            FarmRepository.connection.value = ConnectionState.OFFLINE
+            return
+        }
+
+        // Unexpected drop: retry with backoff, resuming with the saved session.
+        FarmRepository.connection.value = ConnectionState.CONNECTING
+        FarmRepository.statusText.value = "Connection lost — reconnecting…"
+        pendingReconnect = true
+        pendingCredentials = null
+        scope.launch(Dispatchers.IO) {
+            try {
+                Thread.sleep(3000L)
+            } catch (_: InterruptedException) {
+            }
+            if (running && !intentionalDisconnect) connect()
+        }
+    }
+}
