@@ -38,7 +38,8 @@ class SteamController(
     private companion object {
         const val TAG = "SteamController"
         // Distinct from any real client so Steam doesn't kick our own session.
-        const val LOGIN_ID = 0x4641524Du.toInt() // "FARM"
+        // 0x4641524D spells "FARM"; fits in a positive Int.
+        const val LOGIN_ID = 0x4641524D
     }
 
     private val steamClient = SteamClient()

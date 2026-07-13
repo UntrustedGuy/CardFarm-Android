@@ -72,6 +72,9 @@ dependencies {
 
     // Steam network client (open-source port of SteamKit2)
     implementation(libs.javasteam)
+    // protobuf-java is only a runtime dep of JavaSteam, but we build protobuf
+    // messages (ClientGamesPlayed) directly, so we need it at compile time.
+    implementation(libs.protobuf.java)
 
     // Badge page scraping
     implementation(libs.okhttp)
