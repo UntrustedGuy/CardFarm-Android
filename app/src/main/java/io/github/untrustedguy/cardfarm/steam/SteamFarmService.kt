@@ -129,6 +129,10 @@ class SteamFarmService : Service() {
     override fun onDestroy() {
         controller.shutdown()
         scope.cancel()
+        // Explicitly drop the ongoing notification so it doesn't linger after
+        // sign-out / service stop on some OEM builds.
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 

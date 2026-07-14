@@ -75,6 +75,10 @@ dependencies {
     // protobuf-java is only a runtime dep of JavaSteam, but we build protobuf
     // messages (ClientGamesPlayed) directly, so we need it at compile time.
     implementation(libs.protobuf.java)
+    // JavaSteam's CryptoHelper requires a real BouncyCastle provider on Android
+    // (the platform only ships a stripped com.android.org.bouncycastle). Without
+    // this, CryptoHelper's static initializer throws and the app crashes on login.
+    implementation(libs.bouncycastle)
 
     // Badge page scraping
     implementation(libs.okhttp)
