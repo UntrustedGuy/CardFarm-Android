@@ -70,6 +70,15 @@ fun SteamGuardDialog(
         text = {
             Column {
                 Text(hint, style = MaterialTheme.typography.bodyMedium)
+                if (request.canApproveOnPhone) {
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "Tip: you can also approve the login from a notification " +
+                            "in the Steam app instead of typing a code.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (request.previousCodeWasIncorrect) {
                     Spacer(Modifier.size(8.dp))
                     Text(

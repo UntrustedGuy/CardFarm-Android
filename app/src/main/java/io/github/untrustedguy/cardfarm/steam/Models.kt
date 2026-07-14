@@ -49,6 +49,8 @@ class GuardRequest(
     val type: GuardType,
     val email: String?,
     val previousCodeWasIncorrect: Boolean,
+    /** True when the account can *also* be approved via a push in the real Steam app. */
+    val canApproveOnPhone: Boolean = false,
 ) {
     val future: CompletableFuture<String> = CompletableFuture()
 }

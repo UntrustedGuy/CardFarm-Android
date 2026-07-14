@@ -6,8 +6,12 @@ import `in`.dragonbra.javasteam.base.ClientMsgProtobuf
 import `in`.dragonbra.javasteam.enums.EMsg
 import `in`.dragonbra.javasteam.enums.EResult
 import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesClientserver.CMsgClientGamesPlayed
+import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesAuthSteamclient.CAuthentication_AllowedConfirmation
+import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesAuthSteamclient.EAuthSessionGuardType
+import `in`.dragonbra.javasteam.steam.authentication.AuthPollResult
 import `in`.dragonbra.javasteam.steam.authentication.AuthSessionDetails
 import `in`.dragonbra.javasteam.steam.authentication.AuthenticationException
+import `in`.dragonbra.javasteam.steam.authentication.CredentialsAuthSession
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.LogOnDetails
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.SteamUser
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOffCallback
@@ -180,6 +184,93 @@ class SteamController(
         return result.accessToken
     }
 
+    /**
+     * Resolves Steam Guard for a credentials login.
+     *
+     * By default this just polls silently for the user to tap Approve in the
+     * real Steam app — no code dialog is shown at all, which avoids the race
+     * that was making the real Steam app choke (this app submitting a code
+     * while a push confirmation was still pending on the same login session).
+     *
+     * The code dialog only appears if the push is explicitly *denied*
+     * (EResult.AccessDenied) and the account also allows a code as a
+     * fallback — so denying on the phone lets you finish by typing a code
+     * instead of having to restart the whole login.
+     */
+    private fun resolveGuardAndPoll(authSession: CredentialsAuthSession): AuthPollResult {
+        val allowsDeviceConfirmation = authSession.allowedConfirmations.any {
+            it.confirmationType == EAuthSessionGuardType.k_EAuthSessionGuardType_DeviceConfirmation
+        }
+        val codeConfirmation = authSession.allowedConfirmations.firstOrNull {
+            it.confirmationType == EAuthSessionGuardType.k_EAuthSessionGuardType_DeviceCode ||
+                it.confirmationType == EAuthSessionGuardType.k_EAuthSessionGuardType_EmailCode
+        }
+
+        if (!allowsDeviceConfirmation) {
+            // No phone push offered for this account — use the normal code flow.
+            return authSession.pollingWaitForResult().get()
+        }
+
+        return try {
+            pollSilently(authSession)
+        } catch (e: AuthenticationException) {
+            val wasDenied = e.result == EResult.AccessDenied
+            if (!wasDenied || codeConfirmation == null) throw e
+
+            Log.i(TAG, "Device confirmation denied — falling back to a manual code")
+            FarmRepository.postMessage("Login denied on phone — enter your Steam Guard code instead.")
+            resolveWithCode(authSession, codeConfirmation)
+        }
+    }
+
+    /** Blocks, polling every couple seconds, until the phone push is approved/denied/expired. */
+    private fun pollSilently(authSession: CredentialsAuthSession): AuthPollResult {
+        while (true) {
+            authSession.pollAuthSessionStatus().get()?.let { return it }
+            Thread.sleep(2000L)
+        }
+    }
+
+    /** Shows the code dialog and blocks until a valid code is submitted or the user cancels. */
+    private fun resolveWithCode(
+        authSession: CredentialsAuthSession,
+        codeConfirmation: CAuthentication_AllowedConfirmation,
+    ): AuthPollResult {
+        val guardType = if (codeConfirmation.confirmationType == EAuthSessionGuardType.k_EAuthSessionGuardType_EmailCode) {
+            GuardType.EMAIL_CODE
+        } else {
+            GuardType.DEVICE_CODE
+        }
+        var previousCodeWasIncorrect = false
+
+        while (true) {
+            val guardRequest = GuardRequest(
+                type = guardType,
+                email = codeConfirmation.associatedMessage.takeIf { guardType == GuardType.EMAIL_CODE },
+                previousCodeWasIncorrect = previousCodeWasIncorrect,
+            )
+            FarmRepository.guardRequest.value = guardRequest
+
+            val code = try {
+                guardRequest.future.get()
+            } catch (e: Exception) {
+                throw AuthenticationException("Steam Guard cancelled")
+            } finally {
+                FarmRepository.guardRequest.value = null
+            }
+
+            try {
+                authSession.sendSteamGuardCode(code, codeConfirmation.confirmationType).get()
+            } catch (e: AuthenticationException) {
+                Log.w(TAG, "Guard code rejected", e)
+                previousCodeWasIncorrect = true
+                continue
+            }
+
+            return pollSilently(authSession)
+        }
+    }
+
     private fun onConnected(callback: ConnectedCallback) {
         Log.i(TAG, "Connected to Steam")
         scope.launch(Dispatchers.IO) { authenticate() }
@@ -208,9 +299,9 @@ class SteamController(
                 }
 
                 val authSession = steamClient.authentication
-                    .beginAuthSessionViaCredentials(details).get()
+                    .beginAuthSessionViaCredentials(details).get() as CredentialsAuthSession
 
-                val pollResult = authSession.pollingWaitForResult().get()
+                val pollResult = resolveGuardAndPoll(authSession)
 
                 pollResult.newGuardData?.let { session.guardData = it }
                 session.accountName = pollResult.accountName
