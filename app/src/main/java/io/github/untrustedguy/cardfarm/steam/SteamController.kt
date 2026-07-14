@@ -28,6 +28,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.Closeable
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
 
 /**
  * Owns the JavaSteam [SteamClient] and its callback loop. All Steam network
@@ -244,7 +246,7 @@ class SteamController(
 
         if (!allowsDeviceConfirmation) {
             // No phone push offered for this account — use the normal code flow.
-            return authSession.pollingWaitForResult().get()
+            return authSession.pollingWaitForResult().getUnwrapped()
         }
 
         return try {
@@ -262,7 +264,7 @@ class SteamController(
     /** Blocks, polling every couple seconds, until the phone push is approved/denied/expired. */
     private fun pollSilently(authSession: CredentialsAuthSession): AuthPollResult {
         while (true) {
-            authSession.pollAuthSessionStatus().get()?.let { return it }
+            authSession.pollAuthSessionStatus().getUnwrapped()?.let { return it }
             Thread.sleep(2000L)
         }
     }
@@ -296,7 +298,7 @@ class SteamController(
             }
 
             try {
-                authSession.sendSteamGuardCode(code, codeConfirmation.confirmationType).get()
+                authSession.sendSteamGuardCode(code, codeConfirmation.confirmationType).getUnwrapped()
             } catch (e: AuthenticationException) {
                 Log.w(TAG, "Guard code rejected", e)
                 previousCodeWasIncorrect = true
@@ -335,7 +337,7 @@ class SteamController(
                 }
 
                 val authSession = steamClient.authentication
-                    .beginAuthSessionViaCredentials(details).get() as CredentialsAuthSession
+                    .beginAuthSessionViaCredentials(details).getUnwrapped()
 
                 val pollResult = resolveGuardAndPoll(authSession)
 
@@ -429,4 +431,21 @@ class SteamController(
             if (running && !intentionalDisconnect) connect()
         }
     }
+}
+
+/**
+ * JavaSteam's auth methods (`pollAuthSessionStatus`, `sendSteamGuardCode`, …)
+ * are built with kotlinx-coroutines' `future{}` builder and documented as
+ * `@Throws(AuthenticationException::class)`. But `Future.get()` always wraps
+ * whatever the underlying computation threw in [ExecutionException], per the
+ * plain-Java `Future` contract — coroutine builders don't change that. A bare
+ * `catch (e: AuthenticationException)` around a `.get()` call on one of these
+ * futures never fires; the real exception is `e.cause`. Callers that need to
+ * inspect the failure (e.g. distinguishing an explicit Steam Guard denial
+ * from other errors) must unwrap through this instead of calling `.get()`.
+ */
+private fun <T> CompletableFuture<T>.getUnwrapped(): T = try {
+    get()
+} catch (e: ExecutionException) {
+    throw e.cause as? AuthenticationException ?: e
 }
