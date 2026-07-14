@@ -6,12 +6,15 @@ import `in`.dragonbra.javasteam.base.ClientMsgProtobuf
 import `in`.dragonbra.javasteam.enums.EMsg
 import `in`.dragonbra.javasteam.enums.EResult
 import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesClientserver.CMsgClientGamesPlayed
+import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesPlayerSteamclient.CPlayer_GetOwnedGames_Request
 import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesAuthSteamclient.CAuthentication_AllowedConfirmation
 import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesAuthSteamclient.EAuthSessionGuardType
+import `in`.dragonbra.javasteam.rpc.service.Player
 import `in`.dragonbra.javasteam.steam.authentication.AuthPollResult
 import `in`.dragonbra.javasteam.steam.authentication.AuthSessionDetails
 import `in`.dragonbra.javasteam.steam.authentication.AuthenticationException
 import `in`.dragonbra.javasteam.steam.authentication.CredentialsAuthSession
+import `in`.dragonbra.javasteam.steam.handlers.steamunifiedmessages.SteamUnifiedMessages
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.LogOnDetails
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.SteamUser
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOffCallback
@@ -49,6 +52,9 @@ class SteamController(
     private val steamClient = SteamClient()
     private val manager = CallbackManager(steamClient)
     private val steamUser: SteamUser = steamClient.getHandler(SteamUser::class.java)!!
+    private val unifiedMessages: SteamUnifiedMessages =
+        steamClient.getHandler(SteamUnifiedMessages::class.java)!!
+    private val playerService: Player by lazy { unifiedMessages.createService(Player::class.java) }
     private val subscriptions = mutableListOf<Closeable>()
     private val authenticator = UiAuthenticator()
     private val farmingEngine = FarmingEngine(this, session, scope)
@@ -126,6 +132,7 @@ class SteamController(
         session.clearSession()
         farmingEngine.stop()
         FarmRepository.badges.value = emptyList()
+        FarmRepository.library.value = emptyList()
         FarmRepository.accountName.value = null
         runCatching {
             if (steamClient.isConnected) steamUser.logOff()
@@ -139,6 +146,7 @@ class SteamController(
     fun idleGames(appIds: List<Int>) = farmingEngine.idleGames(appIds)
     fun stopIdling() = farmingEngine.stop()
     fun refreshBadges() = farmingEngine.refreshBadges()
+    fun loadLibrary() = farmingEngine.loadLibrary()
 
     // ---- Internal ----------------------------------------------------------
 
@@ -169,6 +177,34 @@ class SteamController(
 
     val currentSteamId: SteamID?
         get() = steamClient.steamID
+
+    /**
+     * Fetches the account's full owned-games library via Steam's native
+     * Player.GetOwnedGames unified-service RPC — sent over the existing Steam
+     * connection, no HTTP request, no Web API key, no scraping. Blocking —
+     * call from a background thread.
+     */
+    fun fetchOwnedGames(): List<OwnedGame> {
+        val steamId = currentSteamId ?: throw IllegalStateException("Not logged on")
+        val request = CPlayer_GetOwnedGames_Request.newBuilder()
+            .setSteamid(steamId.convertToUInt64())
+            .setIncludeAppinfo(true)
+            .setIncludePlayedFreeGames(true)
+            .build()
+
+        val response = playerService.getOwnedGames(request).toFuture().get()
+        if (response.result != EResult.OK) {
+            throw IllegalStateException("GetOwnedGames failed: ${response.result}")
+        }
+
+        return response.body.gamesList.map { game ->
+            OwnedGame(
+                appId = game.appid,
+                name = game.name,
+                playtimeForeverMinutes = game.playtimeForever,
+            )
+        }
+    }
 
     /**
      * Exchanges a long-lived refresh token for a short-lived web access token,

@@ -9,6 +9,7 @@ import io.github.untrustedguy.cardfarm.steam.FarmCommand
 import io.github.untrustedguy.cardfarm.steam.FarmRepository
 import io.github.untrustedguy.cardfarm.steam.FarmingState
 import io.github.untrustedguy.cardfarm.steam.GuardRequest
+import io.github.untrustedguy.cardfarm.steam.OwnedGame
 import io.github.untrustedguy.cardfarm.steam.SteamFarmService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -26,6 +27,8 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
     val statusText: StateFlow<String> = FarmRepository.statusText
     val accountName: StateFlow<String?> = FarmRepository.accountName
     val badges: StateFlow<List<BadgeGame>> = FarmRepository.badges
+    val library: StateFlow<List<OwnedGame>> = FarmRepository.library
+    val loadingLibrary: StateFlow<Boolean> = FarmRepository.loadingLibrary
     val farming: StateFlow<FarmingState> = FarmRepository.farming
     val guardRequest: StateFlow<GuardRequest?> = FarmRepository.guardRequest
     val refreshingBadges: StateFlow<Boolean> = FarmRepository.refreshingBadges
@@ -62,6 +65,7 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
     fun startCardFarming() = FarmRepository.send(FarmCommand.StartFarming)
     fun stopIdling() = FarmRepository.send(FarmCommand.StopIdling)
     fun refreshBadges() = FarmRepository.send(FarmCommand.RefreshBadges)
+    fun loadLibrary() = FarmRepository.send(FarmCommand.LoadLibrary)
     fun idleGames(appIds: List<Int>) = FarmRepository.send(FarmCommand.IdleGames(appIds))
     fun logout() = FarmRepository.send(FarmCommand.Logout)
 

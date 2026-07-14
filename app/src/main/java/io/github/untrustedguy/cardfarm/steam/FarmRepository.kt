@@ -15,6 +15,8 @@ object FarmRepository {
     val statusText = MutableStateFlow("")
     val accountName = MutableStateFlow<String?>(null)
     val badges = MutableStateFlow<List<BadgeGame>>(emptyList())
+    val library = MutableStateFlow<List<OwnedGame>>(emptyList())
+    val loadingLibrary = MutableStateFlow(false)
     val farming = MutableStateFlow<FarmingState>(FarmingState.Stopped)
     val guardRequest = MutableStateFlow<GuardRequest?>(null)
     val refreshingBadges = MutableStateFlow(false)

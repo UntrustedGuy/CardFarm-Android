@@ -16,7 +16,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,6 +26,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.untrustedguy.cardfarm.steam.ConnectionState
 import io.github.untrustedguy.cardfarm.ui.DashboardScreen
 import io.github.untrustedguy.cardfarm.ui.FarmViewModel
+import io.github.untrustedguy.cardfarm.ui.LibraryScreen
 import io.github.untrustedguy.cardfarm.ui.LoginScreen
 import io.github.untrustedguy.cardfarm.ui.SteamGuardDialog
 import io.github.untrustedguy.cardfarm.ui.theme.CardFarmTheme
@@ -49,9 +52,12 @@ private fun CardFarmRoot(viewModel: FarmViewModel = viewModel()) {
     val statusText by viewModel.statusText.collectAsStateWithLifecycle()
     val accountName by viewModel.accountName.collectAsStateWithLifecycle()
     val badges by viewModel.badges.collectAsStateWithLifecycle()
+    val library by viewModel.library.collectAsStateWithLifecycle()
+    val loadingLibrary by viewModel.loadingLibrary.collectAsStateWithLifecycle()
     val farming by viewModel.farming.collectAsStateWithLifecycle()
     val guardRequest by viewModel.guardRequest.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshingBadges.collectAsStateWithLifecycle()
+    var showLibrary by remember { mutableStateOf(false) }
 
     // Ask for notification permission (Android 13+) so the FGS notice shows.
     val notifPermission = rememberLauncherForActivityResult(
@@ -74,6 +80,10 @@ private fun CardFarmRoot(viewModel: FarmViewModel = viewModel()) {
         }
     }
 
+    LaunchedEffect(connection) {
+        if (connection == ConnectionState.OFFLINE) showLibrary = false
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -81,20 +91,33 @@ private fun CardFarmRoot(viewModel: FarmViewModel = viewModel()) {
         val loggedOn = connection == ConnectionState.LOGGED_ON
 
         if (loggedOn) {
-            DashboardScreen(
-                accountName = accountName,
-                connection = connection,
-                statusText = statusText,
-                farming = farming,
-                badges = badges,
-                refreshing = refreshing,
-                onStartFarming = viewModel::startCardFarming,
-                onStopIdling = viewModel::stopIdling,
-                onRefresh = viewModel::refreshBadges,
-                onIdleGames = viewModel::idleGames,
-                onParseAppIds = viewModel::parseAppIds,
-                onLogout = viewModel::logout,
-            )
+            if (showLibrary) {
+                LibraryScreen(
+                    games = library,
+                    loading = loadingLibrary,
+                    farming = farming,
+                    onRefresh = viewModel::loadLibrary,
+                    onIdleGames = viewModel::idleGames,
+                    onStopIdling = viewModel::stopIdling,
+                    onBack = { showLibrary = false },
+                )
+            } else {
+                DashboardScreen(
+                    accountName = accountName,
+                    connection = connection,
+                    statusText = statusText,
+                    farming = farming,
+                    badges = badges,
+                    refreshing = refreshing,
+                    onStartFarming = viewModel::startCardFarming,
+                    onStopIdling = viewModel::stopIdling,
+                    onRefresh = viewModel::refreshBadges,
+                    onIdleGames = viewModel::idleGames,
+                    onParseAppIds = viewModel::parseAppIds,
+                    onOpenLibrary = { showLibrary = true },
+                    onLogout = viewModel::logout,
+                )
+            }
         } else {
             LoginScreen(
                 connection = connection,

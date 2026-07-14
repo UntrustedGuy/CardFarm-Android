@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Timer
@@ -68,6 +69,7 @@ fun DashboardScreen(
     onRefresh: () -> Unit,
     onIdleGames: (List<Int>) -> Unit,
     onParseAppIds: (String) -> List<Int>,
+    onOpenLibrary: () -> Unit,
     onLogout: () -> Unit,
 ) {
     var showCustomIdle by remember { mutableStateOf(false) }
@@ -91,6 +93,9 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenLibrary) {
+                        Icon(Icons.Default.SportsEsports, contentDescription = "Your games")
+                    }
                     IconButton(onClick = onRefresh, enabled = !refreshing) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh badges")
                     }

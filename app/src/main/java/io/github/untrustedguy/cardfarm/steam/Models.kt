@@ -39,6 +39,23 @@ data class BadgeGame(
         get() = "https://cdn.cloudflare.steamstatic.com/steam/apps/$appId/capsule_184x69.jpg"
 }
 
+/** A game the account owns — full library, not just games with card drops. */
+data class OwnedGame(
+    val appId: Int,
+    val name: String,
+    val playtimeForeverMinutes: Int,
+) {
+    val capsuleUrl: String
+        get() = "https://cdn.cloudflare.steamstatic.com/steam/apps/$appId/capsule_184x69.jpg"
+
+    val playtimeLabel: String
+        get() = when {
+            playtimeForeverMinutes <= 0 -> "Never played"
+            playtimeForeverMinutes < 60 -> "${playtimeForeverMinutes}m"
+            else -> "${playtimeForeverMinutes / 60}h ${playtimeForeverMinutes % 60}m"
+        }
+}
+
 enum class GuardType { DEVICE_CODE, EMAIL_CODE }
 
 /**
@@ -67,5 +84,6 @@ sealed class FarmCommand {
     data class IdleGames(val appIds: List<Int>) : FarmCommand()
     data object StopIdling : FarmCommand()
     data object RefreshBadges : FarmCommand()
+    data object LoadLibrary : FarmCommand()
     data object Logout : FarmCommand()
 }

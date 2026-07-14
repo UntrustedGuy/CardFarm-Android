@@ -103,6 +103,21 @@ class FarmingEngine(
         }
     }
 
+    fun loadLibrary() {
+        scope.launch(Dispatchers.IO) {
+            FarmRepository.loadingLibrary.value = true
+            try {
+                val games = controller.fetchOwnedGames()
+                FarmRepository.library.value = games.sortedByDescending { it.playtimeForeverMinutes }
+            } catch (e: Exception) {
+                Log.e(TAG, "Library load failed", e)
+                FarmRepository.postMessage("Couldn't load library: ${e.message}")
+            } finally {
+                FarmRepository.loadingLibrary.value = false
+            }
+        }
+    }
+
     private suspend fun farmLoop() {
         FarmRepository.statusText.value = "Scanning badges…"
         // delay() below is cancellable, so cancelling farmJob breaks the loop;

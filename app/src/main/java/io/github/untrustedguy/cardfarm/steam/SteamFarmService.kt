@@ -61,6 +61,7 @@ class SteamFarmService : Service() {
                     is FarmCommand.IdleGames -> controller.idleGames(command.appIds)
                     is FarmCommand.StopIdling -> controller.stopIdling()
                     is FarmCommand.RefreshBadges -> controller.refreshBadges()
+                    is FarmCommand.LoadLibrary -> controller.loadLibrary()
                     is FarmCommand.Logout -> {
                         controller.logout()
                         stopSelf()
