@@ -46,6 +46,11 @@ android {
             excludes += "/META-INF/DEPENDENCIES"
             excludes += "/META-INF/LICENSE*"
             excludes += "/META-INF/NOTICE*"
+            // BouncyCastle multi-release jars carry duplicate OSGI metadata.
+            excludes += "/META-INF/versions/**/OSGI-INF/MANIFEST.MF"
+            excludes += "/META-INF/*.SF"
+            excludes += "/META-INF/*.DSA"
+            excludes += "/META-INF/*.RSA"
         }
     }
 }
