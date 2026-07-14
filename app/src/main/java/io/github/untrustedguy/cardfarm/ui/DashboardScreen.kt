@@ -17,7 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Timer
@@ -95,7 +95,7 @@ fun DashboardScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh badges")
                     }
                     IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.SportsEsports, contentDescription = "Sign out")
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
