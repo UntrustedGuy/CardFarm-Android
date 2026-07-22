@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -48,12 +50,13 @@ fun LoginScreen(
     connection: ConnectionState,
     statusText: String,
     hasSavedSession: Boolean,
-    onLogin: (String, String) -> Unit,
+    onLogin: (String, String, String) -> Unit,
     onAutoConnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var guardCode by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
     val busy = connection == ConnectionState.CONNECTING ||
@@ -121,6 +124,28 @@ fun LoginScreen(
             else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Next,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = guardCode,
+            onValueChange = { value ->
+                guardCode = value
+                    .filter(Char::isLetterOrDigit)
+                    .uppercase()
+                    .take(GUARD_CODE_LENGTH)
+            },
+            label = { Text("Steam Guard code") },
+            leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) },
+            singleLine = true,
+            enabled = !busy,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Characters,
+                keyboardType = KeyboardType.Ascii,
                 imeAction = ImeAction.Done,
             ),
             modifier = Modifier.fillMaxWidth(),
@@ -129,8 +154,11 @@ fun LoginScreen(
         Spacer(Modifier.height(24.dp))
 
         Button(
-            onClick = { onLogin(username, password) },
-            enabled = !busy && username.isNotBlank() && password.isNotBlank(),
+            onClick = { onLogin(username, password, guardCode) },
+            enabled = !busy &&
+                username.isNotBlank() &&
+                password.isNotBlank() &&
+                guardCode.length == GUARD_CODE_LENGTH,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
@@ -168,3 +196,5 @@ fun LoginScreen(
         )
     }
 }
+
+private const val GUARD_CODE_LENGTH = 5

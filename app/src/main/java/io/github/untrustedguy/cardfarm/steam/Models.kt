@@ -75,7 +75,11 @@ class GuardRequest(
 /** Commands sent from the UI to the foreground service. */
 sealed class FarmCommand {
     /** Fresh login with credentials. */
-    data class Login(val username: String, val password: String) : FarmCommand()
+    data class Login(
+        val username: String,
+        val password: String,
+        val guardCode: String,
+    ) : FarmCommand()
 
     /** Reconnect using the stored refresh token. */
     data object Connect : FarmCommand()
