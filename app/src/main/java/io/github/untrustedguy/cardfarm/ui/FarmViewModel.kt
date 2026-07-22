@@ -26,6 +26,7 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
     val connection: StateFlow<ConnectionState> = FarmRepository.connection
     val statusText: StateFlow<String> = FarmRepository.statusText
     val accountName: StateFlow<String?> = FarmRepository.accountName
+    val appearOnline: StateFlow<Boolean> = FarmRepository.appearOnline
     val badges: StateFlow<List<BadgeGame>> = FarmRepository.badges
     val library: StateFlow<List<OwnedGame>> = FarmRepository.library
     val loadingLibrary: StateFlow<Boolean> = FarmRepository.loadingLibrary
@@ -66,6 +67,7 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
     fun stopIdling() = FarmRepository.send(FarmCommand.StopIdling)
     fun refreshBadges() = FarmRepository.send(FarmCommand.RefreshBadges)
     fun loadLibrary() = FarmRepository.send(FarmCommand.LoadLibrary)
+    fun setOnlineStatus(online: Boolean) = FarmRepository.send(FarmCommand.SetOnlineStatus(online))
     fun idleGames(appIds: List<Int>) = FarmRepository.send(FarmCommand.IdleGames(appIds))
     fun logout() = FarmRepository.send(FarmCommand.Logout)
 
@@ -74,6 +76,7 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
         raw.split(',', ' ', '\n', ';')
             .mapNotNull { it.trim().toIntOrNull() }
             .distinct()
+            .take(1)
 }
 
 /** Small shim so we don't import java.util directly at the call site. */

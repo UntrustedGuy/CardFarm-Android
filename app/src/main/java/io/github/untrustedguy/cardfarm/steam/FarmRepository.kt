@@ -14,6 +14,7 @@ object FarmRepository {
     val connection = MutableStateFlow(ConnectionState.OFFLINE)
     val statusText = MutableStateFlow("")
     val accountName = MutableStateFlow<String?>(null)
+    val appearOnline = MutableStateFlow(true)
     val badges = MutableStateFlow<List<BadgeGame>>(emptyList())
     val library = MutableStateFlow<List<OwnedGame>>(emptyList())
     val loadingLibrary = MutableStateFlow(false)

@@ -48,7 +48,7 @@ class SteamFarmService : Service() {
                 stopSelf()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun drainCommands() {
@@ -66,6 +66,7 @@ class SteamFarmService : Service() {
                     is FarmCommand.StopIdling -> controller.stopIdling()
                     is FarmCommand.RefreshBadges -> controller.refreshBadges()
                     is FarmCommand.LoadLibrary -> controller.loadLibrary()
+                    is FarmCommand.SetOnlineStatus -> controller.setOnlineStatus(command.online)
                     is FarmCommand.Logout -> {
                         controller.logout()
                         stopSelf()
@@ -134,11 +135,18 @@ class SteamFarmService : Service() {
     override fun onDestroy() {
         controller.shutdown()
         scope.cancel()
+        FarmRepository.resetToOffline()
+        FarmRepository.statusText.value = "Stopped"
         // Explicitly drop the ongoing notification so it doesn't linger after
         // sign-out / service stop on some OEM builds.
         stopForeground(STOP_FOREGROUND_REMOVE)
         getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         super.onDestroy()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -30,7 +30,8 @@
         <service
             android:name=".steam.SteamFarmService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="true">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Maintains a persistent Steam network connection to idle games and farm trading card drops while the app is in the background." />
