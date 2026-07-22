@@ -41,9 +41,9 @@ class FarmViewModel(app: Application) : AndroidViewModel(app) {
         SteamFarmService.start(getApplication())
     }
 
-    fun login(username: String, password: String) {
+    fun login(username: String, password: String, guardCode: String) {
         ensureService()
-        FarmRepository.send(FarmCommand.Login(username.trim(), password))
+        FarmRepository.send(FarmCommand.Login(username.trim(), password, guardCode.trim()))
     }
 
     fun autoConnect() {

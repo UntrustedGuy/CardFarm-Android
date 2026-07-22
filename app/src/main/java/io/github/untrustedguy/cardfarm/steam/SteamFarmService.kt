@@ -55,7 +55,11 @@ class SteamFarmService : Service() {
         scope.launch {
             for (command in FarmRepository.commands) {
                 when (command) {
-                    is FarmCommand.Login -> controller.loginWithCredentials(command.username, command.password)
+                    is FarmCommand.Login -> controller.loginWithCredentials(
+                        command.username,
+                        command.password,
+                        command.guardCode,
+                    )
                     is FarmCommand.Connect -> controller.reconnectWithSession()
                     is FarmCommand.StartFarming -> controller.startCardFarming()
                     is FarmCommand.IdleGames -> controller.idleGames(command.appIds)
