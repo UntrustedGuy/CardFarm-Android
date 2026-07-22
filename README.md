@@ -22,20 +22,22 @@ built on). That gives us, natively on Android:
 
 The **card-farming policy** is implemented ASF-style on top: it scrapes your
 `steamcommunity.com` badge pages to find games with remaining card drops, idles
-them in batches, and re-checks periodically until everything is farmed.
+them one at a time, and re-checks periodically until everything is farmed.
 
 ## Features
 
 - 🔐 **Secure login** — password is sent only to Steam and never stored. Only an
   encrypted Steam refresh token is kept on-device (`EncryptedSharedPreferences`).
 - 🛡️ **Steam Guard** — in-app dialog for both authenticator and email codes.
-- 🃏 **Automatic card farming** — finds all games with drops and farms them.
-- 🎮 **Custom game idling** — enter any App IDs to idle (great for playtime).
+- 🃏 **One-game card farming** — finds games with drops and farms them one at a time.
+- 🎮 **Custom game idling** — enter one App ID to idle (great for playtime).
+- 👁️ **Steam visibility** — appear Online or Offline to friends while CardFarm runs.
 - 📊 **Live dashboard** — remaining drops, games to farm, and per-game status.
 - 🔄 **Background service** — a foreground service keeps farming while the app is
   minimized, with an ongoing notification and a one-tap sign-out.
 - ♻️ **Auto-resume** — reconnects and resumes farming after network drops or a
-  cold start, using the saved session.
+  cold start, using the saved session. Removing CardFarm from Recents stops its
+  Steam connection and notification.
 
 ## Project layout
 

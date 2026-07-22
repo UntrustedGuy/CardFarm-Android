@@ -89,5 +89,6 @@ sealed class FarmCommand {
     data object StopIdling : FarmCommand()
     data object RefreshBadges : FarmCommand()
     data object LoadLibrary : FarmCommand()
+    data class SetOnlineStatus(val online: Boolean) : FarmCommand()
     data object Logout : FarmCommand()
 }

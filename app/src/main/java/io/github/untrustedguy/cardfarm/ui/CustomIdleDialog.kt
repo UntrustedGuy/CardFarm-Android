@@ -28,38 +28,30 @@ fun CustomIdleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Idle specific games") },
+        title = { Text("Idle a specific game") },
         text = {
             Column {
                 Text(
-                    "Enter Steam App IDs to idle, separated by commas or spaces. " +
-                        "You can find an App ID in a game's store URL.",
+                    "Enter one Steam App ID. You can find it in the game's store URL.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = raw,
                     onValueChange = { raw = it },
-                    label = { Text("App IDs") },
-                    placeholder = { Text("e.g. 730, 440, 570") },
+                    label = { Text("App ID") },
+                    placeholder = { Text("e.g. 730") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(120.dp),
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (parsed.isEmpty()) "No valid App IDs yet"
-                    else "${parsed.size} game(s): ${parsed.joinToString(", ")}",
+                    if (parsed.isEmpty()) "No valid App ID yet"
+                    else "Game: ${parsed.first()}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (parsed.size > 32) {
-                    Text(
-                        "Steam idles at most 32 games at once — extras are ignored.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
             }
         },
         confirmButton = {

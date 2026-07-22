@@ -51,6 +51,7 @@ private fun CardFarmRoot(viewModel: FarmViewModel = viewModel()) {
     val connection by viewModel.connection.collectAsStateWithLifecycle()
     val statusText by viewModel.statusText.collectAsStateWithLifecycle()
     val accountName by viewModel.accountName.collectAsStateWithLifecycle()
+    val appearOnline by viewModel.appearOnline.collectAsStateWithLifecycle()
     val badges by viewModel.badges.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val loadingLibrary by viewModel.loadingLibrary.collectAsStateWithLifecycle()
@@ -105,6 +106,7 @@ private fun CardFarmRoot(viewModel: FarmViewModel = viewModel()) {
                 DashboardScreen(
                     accountName = accountName,
                     connection = connection,
+                    appearOnline = appearOnline,
                     statusText = statusText,
                     farming = farming,
                     badges = badges,
@@ -112,6 +114,7 @@ private fun CardFarmRoot(viewModel: FarmViewModel = viewModel()) {
                     onStartFarming = viewModel::startCardFarming,
                     onStopIdling = viewModel::stopIdling,
                     onRefresh = viewModel::refreshBadges,
+                    onAppearOnlineChange = viewModel::setOnlineStatus,
                     onIdleGames = viewModel::idleGames,
                     onParseAppIds = viewModel::parseAppIds,
                     onOpenLibrary = { showLibrary = true },

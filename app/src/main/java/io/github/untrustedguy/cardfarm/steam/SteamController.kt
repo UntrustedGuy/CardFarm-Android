@@ -4,6 +4,7 @@ import android.util.Log
 import io.github.untrustedguy.cardfarm.data.SessionStore
 import `in`.dragonbra.javasteam.base.ClientMsgProtobuf
 import `in`.dragonbra.javasteam.enums.EMsg
+import `in`.dragonbra.javasteam.enums.EPersonaState
 import `in`.dragonbra.javasteam.enums.EResult
 import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesClientserver.CMsgClientGamesPlayed
 import `in`.dragonbra.javasteam.protobufs.steamclient.SteammessagesPlayerSteamclient.CPlayer_GetOwnedGames_Request
@@ -14,6 +15,7 @@ import `in`.dragonbra.javasteam.steam.authentication.AuthPollResult
 import `in`.dragonbra.javasteam.steam.authentication.AuthSessionDetails
 import `in`.dragonbra.javasteam.steam.authentication.AuthenticationException
 import `in`.dragonbra.javasteam.steam.authentication.CredentialsAuthSession
+import `in`.dragonbra.javasteam.steam.handlers.steamfriends.SteamFriends
 import `in`.dragonbra.javasteam.steam.handlers.steamunifiedmessages.SteamUnifiedMessages
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.LogOnDetails
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.SteamUser
@@ -54,6 +56,7 @@ class SteamController(
     private val steamClient = SteamClient()
     private val manager = CallbackManager(steamClient)
     private val steamUser: SteamUser = steamClient.getHandler(SteamUser::class.java)!!
+    private val steamFriends: SteamFriends = steamClient.getHandler(SteamFriends::class.java)!!
     private val unifiedMessages: SteamUnifiedMessages =
         steamClient.getHandler(SteamUnifiedMessages::class.java)!!
     private val playerService: Player by lazy { unifiedMessages.createService(Player::class.java) }
@@ -69,6 +72,10 @@ class SteamController(
     /** Set when reconnecting with a stored refresh token. */
     @Volatile private var pendingReconnect = false
     @Volatile private var intentionalDisconnect = false
+
+    init {
+        FarmRepository.appearOnline.value = session.appearOnline
+    }
 
     fun start() {
         if (running) return
@@ -150,6 +157,14 @@ class SteamController(
     fun refreshBadges() = farmingEngine.refreshBadges()
     fun loadLibrary() = farmingEngine.loadLibrary()
 
+    fun setOnlineStatus(online: Boolean) {
+        session.appearOnline = online
+        FarmRepository.appearOnline.value = online
+        if (FarmRepository.connection.value == ConnectionState.LOGGED_ON) {
+            applyPersonaState()
+        }
+    }
+
     // ---- Internal ----------------------------------------------------------
 
     private fun connect() {
@@ -160,21 +175,28 @@ class SteamController(
     }
 
     /**
-     * Sends a ClientGamesPlayed message. An empty list stops idling; up to ~32
-     * app IDs can be idled at once (Steam's limit), matching ASF behaviour.
+     * Sends a ClientGamesPlayed message. CardFarm deliberately allows only one
+     * app ID at a time to keep farming activity conservative.
      */
     fun playGames(appIds: List<Int>) {
         if (!steamClient.isConnected) return
+        val activeAppId = appIds.firstOrNull()
         val request = ClientMsgProtobuf<CMsgClientGamesPlayed.Builder>(
             CMsgClientGamesPlayed::class.java,
             EMsg.ClientGamesPlayed,
         ).apply {
-            appIds.forEach { appId ->
+            activeAppId?.let { appId ->
                 body.addGamesPlayedBuilder().setGameId(appId.toLong())
             }
         }
         steamClient.send(request)
-        Log.d(TAG, "Now playing ${appIds.size} game(s): $appIds")
+        Log.d(TAG, "Now playing: ${activeAppId ?: "none"}")
+    }
+
+    private fun applyPersonaState() {
+        val state = if (session.appearOnline) EPersonaState.Online else EPersonaState.Invisible
+        steamFriends.setPersonaState(state)
+        Log.d(TAG, "Steam persona state set to $state")
     }
 
     val currentSteamId: SteamID?
@@ -395,6 +417,7 @@ class SteamController(
         FarmRepository.accountName.value = session.accountName
         FarmRepository.connection.value = ConnectionState.LOGGED_ON
         FarmRepository.statusText.value = "Signed in"
+        applyPersonaState()
 
         farmingEngine.onLoggedOn()
     }

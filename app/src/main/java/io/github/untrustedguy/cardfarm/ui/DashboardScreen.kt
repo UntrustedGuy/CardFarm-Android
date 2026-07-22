@@ -35,6 +35,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -60,6 +61,7 @@ import io.github.untrustedguy.cardfarm.steam.FarmingState
 fun DashboardScreen(
     accountName: String?,
     connection: ConnectionState,
+    appearOnline: Boolean,
     statusText: String,
     farming: FarmingState,
     badges: List<BadgeGame>,
@@ -67,6 +69,7 @@ fun DashboardScreen(
     onStartFarming: () -> Unit,
     onStopIdling: () -> Unit,
     onRefresh: () -> Unit,
+    onAppearOnlineChange: (Boolean) -> Unit,
     onIdleGames: (List<Int>) -> Unit,
     onParseAppIds: (String) -> List<Int>,
     onOpenLibrary: () -> Unit,
@@ -114,7 +117,13 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            StatusBanner(statusText, farming, badges)
+            StatusBanner(
+                statusText = statusText,
+                farming = farming,
+                badges = badges,
+                appearOnline = appearOnline,
+                onAppearOnlineChange = onAppearOnlineChange,
+            )
 
             FarmControls(
                 farming = farming,
@@ -150,6 +159,8 @@ private fun StatusBanner(
     statusText: String,
     farming: FarmingState,
     badges: List<BadgeGame>,
+    appearOnline: Boolean,
+    onAppearOnlineChange: (Boolean) -> Unit,
 ) {
     val remainingDrops = badges.sumOf { it.dropsRemaining }
     val gamesWithDrops = badges.count { it.dropsRemaining > 0 }
@@ -177,6 +188,24 @@ private fun StatusBanner(
                     text = statusText.ifBlank { "Idle" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Steam status", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        if (appearOnline) "Online" else "Offline",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = appearOnline,
+                    onCheckedChange = onAppearOnlineChange,
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -398,7 +427,7 @@ private fun ConnectionState.label(): String = when (this) {
     ConnectionState.OFFLINE -> "Offline"
     ConnectionState.CONNECTING -> "Connecting…"
     ConnectionState.AUTHENTICATING -> "Authenticating…"
-    ConnectionState.LOGGED_ON -> "Online"
+    ConnectionState.LOGGED_ON -> "Connected"
 }
 
 @Composable

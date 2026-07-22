@@ -16,8 +16,7 @@ import kotlinx.coroutines.withContext
  *
  * Strategy (mirrors ArchiSteamFarm's default "Simple" algorithm):
  *  - Fetch badge pages to find games with remaining card drops.
- *  - Idle those games so Steam grants drops. Steam only drops cards for a few
- *    games at a time, so we idle in batches and re-check periodically.
+ *  - Idle one game at a time and re-check periodically.
  *  - When a game's drops hit zero it's removed; when all are done, farming stops.
  */
 class FarmingEngine(
@@ -27,8 +26,6 @@ class FarmingEngine(
 ) {
     private companion object {
         const val TAG = "FarmingEngine"
-        // How many games to idle simultaneously while farming.
-        const val FARM_BATCH_SIZE = 32
         // Re-scan badges this often while farming (Steam drops are periodic).
         const val FARM_RECHECK_MS = 15 * 60 * 1000L
     }
@@ -69,14 +66,14 @@ class FarmingEngine(
             stop()
             return
         }
-        desiredState = FarmingState.CustomIdle(appIds)
+        val activeAppIds = listOf(appIds.first())
+        desiredState = FarmingState.CustomIdle(activeAppIds)
         session.wasFarming = false
         farmJob?.cancel()
         farmJob = null
-        val batch = appIds.take(FARM_BATCH_SIZE)
-        controller.playGames(batch)
-        FarmRepository.farming.value = FarmingState.CustomIdle(batch)
-        FarmRepository.statusText.value = "Idling ${batch.size} game(s)"
+        controller.playGames(activeAppIds)
+        FarmRepository.farming.value = FarmingState.CustomIdle(activeAppIds)
+        FarmRepository.statusText.value = "Idling game ${activeAppIds.first()}"
     }
 
     fun startCardFarming() {
@@ -147,12 +144,13 @@ class FarmingEngine(
                 return
             }
 
-            val batch = farmable.take(FARM_BATCH_SIZE).map { it.appId }
-            controller.playGames(batch)
+            val activeGame = farmable.first()
+            val activeAppIds = listOf(activeGame.appId)
+            controller.playGames(activeAppIds)
             val totalDrops = farmable.sumOf { it.dropsRemaining }
-            FarmRepository.farming.value = FarmingState.CardFarming(batch)
+            FarmRepository.farming.value = FarmingState.CardFarming(activeAppIds)
             FarmRepository.statusText.value =
-                "Farming ${farmable.size} game(s), $totalDrops drop(s) left"
+                "Farming ${activeGame.name}, $totalDrops total drop(s) left"
 
             delay(FARM_RECHECK_MS)
         }

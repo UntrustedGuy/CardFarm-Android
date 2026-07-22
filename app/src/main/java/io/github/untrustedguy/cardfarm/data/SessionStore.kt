@@ -52,6 +52,11 @@ class SessionStore(context: Context) {
         get() = prefs.getBoolean(KEY_WAS_FARMING, false)
         set(value) = prefs.edit().putBoolean(KEY_WAS_FARMING, value).apply()
 
+    /** Whether CardFarm should make the Steam account appear online to friends. */
+    var appearOnline: Boolean
+        get() = prefs.getBoolean(KEY_APPEAR_ONLINE, true)
+        set(value) = prefs.edit().putBoolean(KEY_APPEAR_ONLINE, value).apply()
+
     val hasSession: Boolean
         get() = !refreshToken.isNullOrEmpty() && !accountName.isNullOrEmpty()
 
@@ -69,5 +74,6 @@ class SessionStore(context: Context) {
         const val KEY_GUARD_DATA = "guard_data"
         const val KEY_STEAM_ID = "steam_id64"
         const val KEY_WAS_FARMING = "was_farming"
+        const val KEY_APPEAR_ONLINE = "appear_online"
     }
 }
